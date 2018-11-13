@@ -1,10 +1,13 @@
-local function write_header(response, callback)
+local function write_header(attributes, response, callback)
+  attributes = attributes or {
+    'Content-Type: text/html'
+  }
+
   local header =
     'HTTP/1.0 200 OK\r\n' ..
-    'Server: NodeMCU on ESP8266\r\n' ..
-    'Content-Type: image/jpeg\r\n' ..
-    'Content-disposition: inline; filename=image.jpg\r\n' ..
-    '\r\n'
+    'Server: NodeMCU on ESP32\r\n' ..
+    table.concat(attributes, '\r\n') ..
+    '\r\n\r\n'
 
   response:send(header, callback)
 end
@@ -54,12 +57,14 @@ return function(port)
       request = parse_request(request)
 
       if routes[request.method][request.url] then
+        local callback, attributes = unpack(routes[request.method][request.url])
+
         local co
         co = coroutine.create(function()
-          write_header(response, function() assert(coroutine.resume(co)) end)
+          write_header(attributes, response, function() assert(coroutine.resume(co)) end)
           coroutine.yield()
 
-          routes[request.method][request.url](request, {
+          callback(request, {
             write = function(value)
               response:send(value, function() assert(coroutine.resume(co)) end)
               coroutine.yield()
@@ -78,9 +83,9 @@ return function(port)
   end)
 
   return {
-    get = function(url, handler) routes.GET[url] = handler end,
-    put = function(url, handler) routes.PUT[url] = handler end,
-    post = function(url, handler) routes.POST[url] = handler end,
-    delete = function(url, handler) routes.DELETE[url] = handler end
+    get = function(url, callback, header_attributes) routes.GET[url] = { callback, header_attributes } end,
+    put = function(url, callback, header_attributes) routes.PUT[url] = { callback, header_attributes } end,
+    post = function(url, callback, header_attributes) routes.POST[url] = { callback, header_attributes } end,
+    delete = function(url, callback, header_attributes) routes.DELETE[url] = { callback, header_attributes } end
   }
 end
